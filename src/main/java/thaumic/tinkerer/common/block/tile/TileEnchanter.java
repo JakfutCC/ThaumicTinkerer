@@ -38,6 +38,7 @@ import thaumcraft.common.Thaumcraft;
 import thaumcraft.common.config.ConfigBlocks;
 import thaumcraft.common.items.wands.ItemWandCasting;
 import thaumic.tinkerer.common.core.helper.Tuple4Int;
+import thaumic.tinkerer.common.core.helper.WorldBounds;
 import thaumic.tinkerer.common.enchantment.core.EnchantmentManager;
 import thaumic.tinkerer.common.lib.LibBlockNames;
 import thaumic.tinkerer.common.lib.LibFeatures;
@@ -50,6 +51,8 @@ public class TileEnchanter extends TileEntity implements ISidedInventory, IMovab
     private static final String TAG_TOTAL_ASPECTS = "totalAspects";
     private static final String TAG_CURRENT_ASPECTS = "currentAspects";
     private static final String TAG_WORKING = "working";
+    private static final int PILLAR_NOT_FOUND = -1;
+    private static final int PILLAR_UNLOADED = -2;
 
     public List<Integer> enchantments = new ArrayList<>();
     public List<Integer> levels = new ArrayList<>();
@@ -104,10 +107,7 @@ public class TileEnchanter extends TileEntity implements ISidedInventory, IMovab
                 return;
             }
 
-            checkPillars();
-
-            if (!working) // Pillar check
-                return;
+            if (!checkPillars()) return;
 
             enchantItem: {
                 for (Aspect aspect : LibFeatures.PRIMAL_ASPECTS) {
@@ -269,9 +269,12 @@ public class TileEnchanter extends TileEntity implements ISidedInventory, IMovab
 
     public boolean checkPillars() {
         if (pillars.isEmpty()) {
-            if (assignPillars()) {
-                working = false;
-                currentAspects = new AspectList();
+            int result = assignLoadedPillars();
+            if (result != 0) {
+                if (result == PILLAR_NOT_FOUND) {
+                    working = false;
+                    currentAspects = new AspectList();
+                }
                 return false;
             }
             return true;
@@ -279,47 +282,62 @@ public class TileEnchanter extends TileEntity implements ISidedInventory, IMovab
 
         for (int i = 0; i < pillars.size(); i++) {
             Tuple4Int pillar = pillars.get(i);
-            int pillarHeight = findPillar(pillar.i1, pillar.i2, pillar.i3);
-            if (pillarHeight == -1) {
+            int pillarHeight = findPillarHeight(pillar.i1, pillar.i2, pillar.i3);
+            if (pillarHeight == PILLAR_UNLOADED) return false;
+            if (pillarHeight == PILLAR_NOT_FOUND) {
                 pillars.clear();
                 return checkPillars();
-            } else if (pillarHeight != pillar.i4) pillar.i4 = pillarHeight;
+            } else pillar.i4 = pillar.i2 + pillarHeight;
         }
 
         return true;
     }
 
     public boolean assignPillars() {
-        int y = yCoord;
-        for (int x = xCoord - 4; x <= xCoord + 4; x++) for (int z = zCoord - 4; z <= zCoord + 4; z++) {
-            int height = findPillar(x, y, z);
-            if (height != -1) pillars.add(new Tuple4Int(x, y, z, height));
+        return assignLoadedPillars() != 0;
+    }
 
-            if (pillars.size() == 6) return false;
+    private int assignLoadedPillars() {
+        int y = yCoord;
+        boolean unavailable = false;
+        for (int x = xCoord - 4; x <= xCoord + 4; x++) for (int z = zCoord - 4; z <= zCoord + 4; z++) {
+            int height = findPillarHeight(x, y, z);
+            if (height == PILLAR_UNLOADED) unavailable = true;
+            if (height >= 0) pillars.add(new Tuple4Int(x, y, z, y + height));
+
+            if (pillars.size() == 6) return 0;
         }
 
         pillars.clear();
-        return true;
+        return unavailable ? PILLAR_UNLOADED : PILLAR_NOT_FOUND;
     }
 
     public int findPillar(int x, int y, int z) {
-        int obsidianFound = 0;
-        for (int i = 0; true; i++) {
-            if (y + i >= 256) return -1;
+        int height = findPillarHeight(x, y, z);
+        return height < 0 ? -1 : y + height;
+    }
 
-            Block id = worldObj.getBlock(x, y + i, z);
-            int meta = worldObj.getBlockMetadata(x, y + i, z);
+    // Use a relative height internally: a valid pillar top can be at Y=-1.
+    private int findPillarHeight(int x, int y, int z) {
+        for (int i = 0; i <= 12; i++) {
+            long blockY = (long) y + i;
+            if (!WorldBounds.contains(worldObj, blockY)) return PILLAR_NOT_FOUND;
+            int targetY = (int) blockY;
+            if (WorldBounds.isCubic(worldObj) && !worldObj.checkChunksExist(x, targetY, z, x, targetY, z))
+                return PILLAR_UNLOADED;
+
+            Block id = worldObj.getBlock(x, targetY, z);
+            int meta = worldObj.getBlockMetadata(x, targetY, z);
             if (id == ConfigBlocks.blockCosmeticSolid && meta == 0) {
-                ++obsidianFound;
                 continue;
             }
             if (id == ConfigBlocks.blockAiry && meta == 1) {
-                if (obsidianFound >= 2 && obsidianFound < 13) return y + i;
-                return -1;
+                return i >= 2 ? i : PILLAR_NOT_FOUND;
             }
 
-            return -1;
+            return PILLAR_NOT_FOUND;
         }
+        return PILLAR_NOT_FOUND;
     }
 
     public void updateAspectList() {

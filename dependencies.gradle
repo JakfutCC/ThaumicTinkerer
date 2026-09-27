@@ -1,6 +1,7 @@
 // Add your dependencies here
 
 dependencies {
+    compileOnly('com.cardinalstar.cubicchunks:CubicChunks1710:v0.1.21-alpha-pre:dev') {transitive=false}
     api('com.github.GTNewHorizons:Baubles-Expanded:2.2.21-GTNH:dev')
     api('thaumcraft:Thaumcraft:1.7.10-4.2.3.5:dev') {transitive=false}
     api('com.github.GTNewHorizons:Applied-Energistics-2-Unofficial:rv3-beta-994-GTNH:api')
