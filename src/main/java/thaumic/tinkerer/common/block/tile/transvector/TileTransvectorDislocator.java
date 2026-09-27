@@ -28,6 +28,7 @@ import thaumcraft.codechicken.lib.vec.Vector3;
 import thaumcraft.common.config.ConfigBlocks;
 import thaumic.tinkerer.common.ThaumicTinkerer;
 import thaumic.tinkerer.common.block.transvector.BlockTransvectorDislocator;
+import thaumic.tinkerer.common.core.helper.WorldBounds;
 import thaumic.tinkerer.common.lib.LibFeatures;
 
 public class TileTransvectorDislocator extends TileTransvector {
@@ -51,15 +52,20 @@ public class TileTransvectorDislocator extends TileTransvector {
     public void receiveRedstonePulse() {
         getTile(); // sanity check
 
-        if (y < 0) return;
-
-        if (cooldown > 0) {
+        if (!hasTarget() || !WorldBounds.contains(worldObj, y)
+                || !WorldBounds
+                        .contains(worldObj, (long) yCoord + ForgeDirection.getOrientation(orientation).offsetY)) {
+            pulseStored = false;
+            return;
+        }
+        ChunkCoordinates targetCoords = getBlockTarget();
+        if (cooldown > 0 || !isTargetLoaded()
+                || !WorldBounds.isLoaded(worldObj, targetCoords.posX, targetCoords.posY, targetCoords.posZ)) {
             pulseStored = true;
             return;
         }
 
         ChunkCoordinates endCoords = new ChunkCoordinates(x, y, z);
-        ChunkCoordinates targetCoords = getBlockTarget();
         List<Entity> entitiesAtEnd = getEntitiesAtPoint(endCoords);
         List<Entity> entitiesAtTarget = getEntitiesAtPoint(targetCoords);
 
@@ -196,12 +202,13 @@ public class TileTransvectorDislocator extends TileTransvector {
 
             TileEntity tile = this.tile == null ? null : TileEntity.createAndLoadEntity(this.tile);
 
-            worldObj.setTileEntity(coords.posX, coords.posY, coords.posZ, tile);
-
             if (tile != null) {
                 tile.xCoord = coords.posX;
                 tile.yCoord = coords.posY;
                 tile.zCoord = coords.posZ;
+            }
+            worldObj.setTileEntity(coords.posX, coords.posY, coords.posZ, tile);
+            if (tile != null) {
                 tile.updateContainingBlockInfo();
             }
 

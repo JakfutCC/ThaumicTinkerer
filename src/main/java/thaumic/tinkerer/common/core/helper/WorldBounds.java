@@ -21,6 +21,11 @@ public final class WorldBounds {
         return Loader.isModLoaded("cubicchunks") && CubicBounds.isCubic(world);
     }
 
+    public static boolean isLoaded(World world, int x, int y, int z) {
+        return isCubic(world) ? contains(world, y) && world.checkChunksExist(x, y, z, x, y, z)
+                : world.blockExists(x, y, z);
+    }
+
     private static final class CubicBounds {
 
         private static boolean isCubic(World world) {

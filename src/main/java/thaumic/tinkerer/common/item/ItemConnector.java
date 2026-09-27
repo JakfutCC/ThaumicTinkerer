@@ -29,6 +29,7 @@ import thaumic.tinkerer.common.block.tile.TileGolemConnector;
 import thaumic.tinkerer.common.block.tile.transvector.TileTransvector;
 import thaumic.tinkerer.common.block.tile.transvector.TileTransvectorInterface;
 import thaumic.tinkerer.common.core.helper.ItemNBTHelper;
+import thaumic.tinkerer.common.core.helper.WorldBounds;
 import thaumic.tinkerer.common.lib.LibItemNames;
 import thaumic.tinkerer.common.lib.LibResearch;
 import thaumic.tinkerer.common.registry.ItemBase;
@@ -42,6 +43,7 @@ public class ItemConnector extends ItemBase {
     private static final String TAG_POS_Y = "posy";
     private static final String TAG_POS_Z = "posz";
     private static final String TAG_CONNECTING_GOLEM = "ConnectingGolem";
+    private static final String TAG_HAS_SELECTION = "hasSelection";
 
     public ItemConnector() {
         super();
@@ -81,6 +83,15 @@ public class ItemConnector extends ItemBase {
         return ItemNBTHelper.getInt(stack, TAG_POS_Z, 0);
     }
 
+    public static boolean hasSelection(ItemStack stack) {
+        return ItemNBTHelper.getBoolean(stack, TAG_HAS_SELECTION, getY(stack) != -1);
+    }
+
+    private static void clearSelection(ItemStack stack) {
+        setY(stack, -1);
+        ItemNBTHelper.setBoolean(stack, TAG_HAS_SELECTION, false);
+    }
+
     @Override
     public boolean shouldDisplayInTab() {
         return true;
@@ -117,11 +128,12 @@ public class ItemConnector extends ItemBase {
 
         TileEntity tile = par3World.getTileEntity(par4, par5, par6);
 
-        if (getY(par1ItemStack) == -1) {
+        if (!hasSelection(par1ItemStack)) {
             if (tile != null && (tile instanceof TileTransvector || tile instanceof TileGolemConnector)) {
                 setX(par1ItemStack, par4);
                 setY(par1ItemStack, par5);
                 setZ(par1ItemStack, par6);
+                ItemNBTHelper.setBoolean(par1ItemStack, TAG_HAS_SELECTION, true);
 
                 if (par3World.isRemote) par2EntityPlayer.swingItem();
 
@@ -135,9 +147,11 @@ public class ItemConnector extends ItemBase {
             int y = getY(par1ItemStack);
             int z = getZ(par1ItemStack);
 
+            if (WorldBounds.isCubic(par3World) && !WorldBounds.isLoaded(par3World, x, y, z)) return true;
+
             TileEntity tile1 = par3World.getTileEntity(x, y, z);
             if (tile1 == null || !(tile1 instanceof TileTransvector)) {
-                setY(par1ItemStack, -1);
+                clearSelection(par1ItemStack);
 
                 par2EntityPlayer.addChatMessage(new ChatComponentTranslation("ttmisc.connector.notpresent"));
             } else {
@@ -149,21 +163,20 @@ public class ItemConnector extends ItemBase {
                     return true;
                 }
 
-                if (Math.abs(x - par4) > trans.getMaxDistance() || Math.abs(y - par5) > trans.getMaxDistance()
-                        || Math.abs(z - par6) > trans.getMaxDistance()) {
+                if (Math.abs((long) x - par4) > trans.getMaxDistance()
+                        || Math.abs((long) y - par5) > trans.getMaxDistance()
+                        || Math.abs((long) z - par6) > trans.getMaxDistance()) {
                     par2EntityPlayer.addChatMessage(new ChatComponentTranslation("ttmisc.connector.toofar"));
                     return true;
                 }
 
-                trans.x = par4;
-                trans.y = par5;
-                trans.z = par6;
+                trans.setTarget(par4, par5, par6);
 
-                setY(par1ItemStack, -1);
+                clearSelection(par1ItemStack);
 
                 playSound(par3World, par4, par5, par6);
                 par2EntityPlayer.addChatMessage(new ChatComponentTranslation("ttmisc.connector.complete"));
-                par3World.markBlockForUpdate(trans.x, trans.y, trans.z);
+                par3World.markBlockForUpdate(trans.xCoord, trans.yCoord, trans.zCoord);
             }
         }
 
@@ -178,7 +191,7 @@ public class ItemConnector extends ItemBase {
 
             if (par3EntityLivingBase instanceof EntityGolemBase) {
 
-                if (getY(par1ItemStack) == -1) {
+                if (!hasSelection(par1ItemStack)) {
                     if (par3EntityLivingBase.worldObj.isRemote) {
                         return false;
                     }
@@ -188,9 +201,12 @@ public class ItemConnector extends ItemBase {
                 int x = getX(par1ItemStack);
                 int y = getY(par1ItemStack);
                 int z = getZ(par1ItemStack);
+                if (WorldBounds.isCubic(par2EntityPlayer.worldObj)
+                        && !WorldBounds.isLoaded(par2EntityPlayer.worldObj, x, y, z))
+                    return !par2EntityPlayer.worldObj.isRemote;
                 TileEntity tile1 = par2EntityPlayer.worldObj.getTileEntity(x, y, z);
                 if (tile1 == null || !(tile1 instanceof TileGolemConnector)) {
-                    setY(par1ItemStack, -1);
+                    clearSelection(par1ItemStack);
                     if (par3EntityLivingBase.worldObj.isRemote) {
                         return false;
                     }
@@ -205,7 +221,7 @@ public class ItemConnector extends ItemBase {
 
                     trans.ConnectGolem(par3EntityLivingBase.getUniqueID());
 
-                    setY(par1ItemStack, -1);
+                    clearSelection(par1ItemStack);
 
                     playSound(
                             par3EntityLivingBase.worldObj,
